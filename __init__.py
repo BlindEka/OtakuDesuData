@@ -1,5 +1,6 @@
 from OtakuDesuData.parser import SearchResultParser, Parser, OngoingParser
-from OtakuDesuData.constants import baseUrl, userAgent, ongoingUrl
+from OtakuDesuData.constants import baseUrl, userAgent, ongoingUrl, animeListUrl, schedulesUrl, dayMapping
+from bs4 import BeautifulSoup as bs
 import requests
 
 
@@ -38,4 +39,25 @@ def get_ongoing(get_all: bool=False):
   return results
 
 def get_schedules():
-  pass
+  response = requests.get(schedulesUrl, headers={'User-Agent': userAgent})
+  soup = bs(response.text,'html.parser')
+  return {
+    dayMapping.get(day.h2.text.strip().lower(), day.h2.text.strip().lower()): [
+      {
+        'title': anime.text.strip() if anime.text else None,
+        'url': anime.get('href')
+      }
+    for anime in day.find_all('a')]
+   for day in soup.find_all('div', class_='kglist321')
+   if day.h2}
+
+def get_anime_list():
+  response = requests.get(animeListUrl, headers={'User-Agent': userAgent})
+  soup = bs(response.text,'html.parser')
+  animeListElements = list = soup.find_all('a',class_='hodebgst')
+  return [
+    {
+      'title': animeListElement.text.strip() if animeListElement.text else None,
+      'url': animeListElement.get('href')
+    }
+  for animeListElement in animeListElements]

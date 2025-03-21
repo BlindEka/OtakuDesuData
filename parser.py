@@ -2,6 +2,10 @@ import requests
 from bs4 import BeautifulSoup as bs
 from OtakuDesuData.constants import *
 import re
+import asyncio
+import httpx
+from OtakuDesuData.request import RequestCore
+import random
 
 
 class Parser:
@@ -20,8 +24,8 @@ class SearchResultParser(Parser):
   @staticmethod
   def _get_anime(soup):
     pattern = animeSearchPattern
-    filteredElements = [element for element in soup.find_all('li') if not element.get('class')]
-    elements = [element for element in filteredElements if re.findall(pattern, element.a.text.lower())]
+    elements = list(filter(lambda element: re.findall(pattern, element.a.text.lower()) if element.a else None, 
+                 filter(lambda element: not element.get('class'), soup.find_all('li'))))
     return [
       {
         'title': element.a.text if element.a else None,
@@ -30,7 +34,7 @@ class SearchResultParser(Parser):
                 'width': element.img.get('width'),
                 'height': element.img.get('height'),
                 'url': element.img.get('src'),
-                'srcset': ( element.img.get('srcset').split()[::2] if len(element.img.get('srcset').split()) > 1 else element.img.get('srcset')) if element.img.get('srcset') else None,
+                'srcset': element.img.get('srcset').split()[::2] if element.img.get('srcset') and len(element.img.get('srcset').split()) > 1 else None,
                 } if element.img else [],
                 'genres': [
                   {
@@ -44,8 +48,8 @@ class SearchResultParser(Parser):
   @staticmethod
   def _get_episodes(soup):
     pattern = episodeSearchPattern
-    filteredElements = [element for element in soup.find_all('li') if not element.get('class')]
-    elements = [element for element in filteredElements if re.findall(pattern, element.a.text.lower())]
+    elements = list(filter(lambda element: re.findall(pattern, element.a.text.lower()) if element.a else None, 
+                 filter(lambda element: not element.get('class'), soup.find_all('li'))))
     return [
       {
         'title': element.a.text,
@@ -56,8 +60,7 @@ class SearchResultParser(Parser):
 
   @staticmethod
   def _get_batch(soup):
-    filteredElements = [element for element in soup.find_all('li') if not element.get('class')]
-    elements = [element for element in filteredElements if '[BATCH]' in (element.a.text if element.a else '')]
+    elements = list(filter(lambda element: '[BATCH]' in element.a.text if element.a else None, filter(lambda element: not element.get('class'), soup.find_all('li'))))
     return [
       {'title': element.a.text,
        'url': element.a.get('href')
@@ -65,8 +68,9 @@ class SearchResultParser(Parser):
        if element.a]
 
 class AnimeParser(Parser):
-  def __init__(self, url: str):
-    response = requests.get(url, headers={'User-Agent': userAgent})
+  def __init__(self, url: str, **kwargs: dict):
+    self.proxy = kwargs.get('proxy')
+    response = requests.get(url, headers=kwargs.get('headers', {'User-Agent': userAgent}), timeout=kwargs.get('timeout', 10), proxies=kwargs.get('proxy', {}))
     soup = bs(response.text, 'html.parser')
     self.title = self.get_title(soup)
     self.details = self.get_details(soup)
@@ -74,11 +78,40 @@ class AnimeParser(Parser):
     self.description = self.get_description(soup)
     self.seasons = self.get_seasons(soup)
     self.episodes = self.get_episodes(soup)
+    if kwargs.get('get_episode_details'):
+      asyncio.run(self._asyncGetAllEpisodeDetails(RotateUserAgent=kwargs.get('RotateUserAgent', True)))
     self.batch = self.get_batch(soup)
 
   @staticmethod
+  async def _asyncGetEpisodeDetails(episode: dict, client: httpx.AsyncClient, **kwargs)->None:
+    try:
+      r = await client.get(
+        url=episode['url'],
+        headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents) if kwargs.get('RotateUserAgent') else userAgent)} if not (headers := kwargs.get('headers')) else headers,
+                           timeout=kwargs.get('timeout', 10))
+      soup = bs(r.text, 'html.parser')
+      episode['details'] = EpisodeParser.get_details(soup)
+      episode['thumbnails'] = EpisodeParser.get_thumbnails(soup)
+      episode['otherEpisodes'] = EpisodeParser.get_episodes(soup)
+      episode['links'] = EpisodeParser.get_links(soup)
+    except Exception as e:
+      episode['details'] = {}
+
+  async def _asyncGetAllEpisodeDetails(self, **kwargs: dict)-> None:
+    try:
+      async with httpx.AsyncClient(proxy=kwargs.get('proxy', self.proxy)) as client:
+        tasks = [asyncio.create_task(
+          self._asyncGetEpisodeDetails(episode,
+                                         client=client,
+                                         RotateUserAgent=kwargs.get('RotateUserAgent', True))
+                                     ) for episode in self.episodes]
+        await asyncio.gather(*tasks, return_exceptions=True)
+    except Exception as e:
+      raise e
+
+  @staticmethod
   def get_title(soup: bs) -> str:
-    return (soup.div.h1.text if soup.div.h1 else None) if soup.div else None
+    return soup.div.h1.text if soup.div and soup.div.h1 else None
 
     @staticmethod
     def get_thumbnails(soup: bs) -> dict:
@@ -92,33 +125,40 @@ class AnimeParser(Parser):
 
   @staticmethod
   def get_details(soup: bs) ->dict:
-    details = soup.find('div', class_='infozin').find_all('span') if soup.find('div', class_='infozin') else []
-    title = {'value': i.text.split(':',2)[1].strip() for i in details[:-1] if AnimeDetailsString.title in i.text.lower()}.get('value')
-    japaneseTitle = {'value': i.text.split(':',2)[1].strip() for i in details[:-1] if AnimeDetailsString.japanese_title in i.text.lower()}.get('value')
-    rating = {'value': i.text.split(':',2)[1].strip() for i in details[:-1] if AnimeDetailsString.rating in i.text.lower()}.get('value')
-    producer = {'value': i.text.split(':',2)[1].strip() for i in details[:-1] if AnimeDetailsString.producer in i.text.lower()}.get('value')
-    type = {'value': i.text.split(':',2)[1].strip() for i in details[:-1] if AnimeDetailsString.type in i.text.lower()}.get('value')
-    status = {'value': i.text.split(':',2)[1].strip() for i in details[:-1] if AnimeDetailsString.status in i.text.lower()}.get('value')
-    episodes = {'value': i.text.split(':',2)[1].strip() for i in details[:-1] if AnimeDetailsString.episodes in i.text.lower()}.get('value')
-    duration = {'value': i.text.split(':',2)[1].strip() for i in details[:-1] if AnimeDetailsString.duration in i.text.lower()}.get('value')
-    releaseDate = {'value': i.text.split(':',2)[1].strip() for i in details[:-1] if AnimeDetailsString.release_date in i.text.lower()}.get('value')
-    studio = {'value': i.text.split(':',2)[1].strip() for i in details[:-1] if AnimeDetailsString.studio in i.text.lower()}.get('value')
-    genres = [{'text': genre.text, 'url': genre.get('href')} for genre in details[-1].find_all('a')] 
-    return {
-      'title': {
-        'title': title,
-        'japanese': japaneseTitle
-    },
-    'rating': rating,
-    'producer': producer,
-    'type': type,
-    'status': status,
-    'episodes': episodes,
-    'duration': duration,
-    'releaseDate': releaseDate,
-    'studio': studio,
-    'genres': genres
-    }
+    def get_details(soup: bs) -> dict:
+      """
+      Extracts anime details from a BeautifulSoup object.
+
+      Args:
+        soup (bs): A BeautifulSoup object containing the parsed HTML of the anime page.
+
+      Returns:
+        dict: A dictionary containing the extracted anime details:
+          - title: A dictionary with 'title' (str) and 'japanese' (str) titles.
+          - rating: The anime's rating (str).
+          - producer: The producer of the anime (str).
+          - type: The type of the anime (e.g., TV, Movie) (str).
+          - status: The current status of the anime (e.g., Ongoing, Completed) (str).
+          - episodes: The number of episodes (str).
+          - duration: The duration of each episode (str).
+          - releaseDate: The release date of the anime (str).
+          - studio: The studio that produced the anime (str).
+          - genres: A list of dictionaries, each containing:
+            - 'text': The genre name (str).
+            - 'url': The URL to the genre page (str).
+      """
+    detailsSection = soup.find('div', class_='infozin').find_all('span') if soup.find('div', class_='infozin') else []
+    details = {
+      animeDetailsMapping.get(detail.text.split(detailsDelimiter, 2)[0].strip().lower(), detail.text.split(detailsDelimiter, 2)[0].strip().lower()): detail.text.split(detailsDelimiter, 2)[1].strip()
+      for detail in detailsSection[:-1]
+    if detail.text and detailsDelimiter in detail.text} if detailsSection else {}
+    details['genres'] = [
+      {
+        'text': genre.text,
+        'url': genre.get('href')
+      }
+    for genre in detailsSection[-1].find_all('a')] if detailsSection else []
+    return details
 
   @staticmethod
   def get_feed(soup: bs) -> list:
@@ -214,11 +254,14 @@ class EpisodeParser(Parser):
     response = requests.get(url, headers={'User-Agent': userAgent})
     soup = bs(response.text, 'html.parser')
     self.title = self.get_title(soup)
+    self.thumbnails = self.get_thumbnails(soup)
+    self.details = self.get_details(soup)
+    self.episodes = self.get_episodes(soup)
     self.links = self.get_links(soup)
 
-    @staticmethod
-    def get_title(soup: bs) ->str:
-      return soup.h4.text if soup.h4 else ''
+  @staticmethod
+  def get_title(soup: bs) ->str:
+    return soup.h4.text if soup.h4 else ''
 
   @staticmethod
   def get_thumbnails(soup: bs)->dict:
@@ -310,7 +353,7 @@ class OngoingParser(Parser):
 
   @property
   def results(self):
-    return [release for page in self._cache.values() for release in page]
+    return [release for page in self._cache.values() for release in page] if self.use_cache else self.releases
 
   def previous(self):
     if self.previous_page:
