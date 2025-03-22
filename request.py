@@ -6,8 +6,7 @@ import os
 import random
 
 class RequestCore:
-  def __init__(self, client=None, proxy: dict={}, **kwargs):
-    self.client = client
+  def __init__(self, proxy=None, **kwargs):
     self.timeout = kwargs.get('timeout', 10)
     self.userAgents = userAgents
     if not proxy:
@@ -19,17 +18,18 @@ class RequestCore:
       if https_proxy:
         self.proxy["https://"] = https_proxy
 
-  @staticmethod
-  async def get(self, url, **kwargs)-> httpx.Response:
-    return requests.get(url=url, headers={'User-Agent': kwargs.get('user_agent', random.choice(self.userAgents))} if not kwargs.get('headers') else kwargs.get('headers'), timeout=kwargs.get('timeout', self.timeout))
+    def syncGetRequest(self, url) -> httpx.Response:
+        return httpx.get(url,
+                         headers={"User-Agent": kwargs.get('user_agent', random.choice(self.userAgents))},
+                         timeout=self.timeout,
+                         cookies=kwargs.get('cookies'),
+                         proxy=self.proxy)
 
-  async def asyncGet(self, url, **kwargs)-> httpx.Response:
-    try:
-      return await self.client.get(
-        url=url,
-                        headers={'User-Agent': kwargs.get('user_agent', random.choice(self.userAgents))} if not kwargs.get('headers') else kwargs.get('headers'),
-                        timeout=kwargs.get('timeout', self.timeout)
-                        )
-    except Exception as e:
-      print(e)
-      raise e
+  async def asyncGetRequest(self, url:str, **kwargs: dict) -> httpx.Response:
+    async with httpx.AsyncClient(proxy=self.proxy) as client:
+      return await client.get(
+        url,
+        headers={"User-Agent": kwargs.get('user_agent', random.choice(self.userAgents))},
+        timeout=self.timeout,
+        cookies=kwargs.get('cookies')
+        )

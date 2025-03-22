@@ -14,15 +14,20 @@ class Parser:
       return getattr(self, key)
     raise KeyError(key)
 
+  @property
+  def results(self):
+    return vars(self)
+
 class SearchResultParser(Parser):
-  def __init__(self, html_string):
+  def __init__(self, html_string: str, **kwargs:dict):
     soup = bs(html_string, 'html.parser')
-    self.anime = self._get_anime(soup)
-    self.episodes = self._get_episodes(soup)
-    self.batch = self._get_batch(soup)
+    self.anime = self.get_anime(soup)
+    self.episodes = self.get_episodes(soup)
+    self.batch = self.get_batch(soup)
+    asyncio.run(AsyncParser.get_details(self, **kwargs))
 
   @staticmethod
-  def _get_anime(soup):
+  def get_anime(soup):
     pattern = animeSearchPattern
     elements = list(filter(lambda element: re.findall(pattern, element.a.text.lower()) if element.a else None, 
                  filter(lambda element: not element.get('class'), soup.find_all('li'))))
@@ -46,7 +51,7 @@ class SearchResultParser(Parser):
                 } for element in elements]
 
   @staticmethod
-  def _get_episodes(soup):
+  def get_episodes(soup):
     pattern = episodeSearchPattern
     elements = list(filter(lambda element: re.findall(pattern, element.a.text.lower()) if element.a else None, 
                  filter(lambda element: not element.get('class'), soup.find_all('li'))))
@@ -59,7 +64,7 @@ class SearchResultParser(Parser):
         if element.a]
 
   @staticmethod
-  def _get_batch(soup):
+  def get_batch(soup):
     elements = list(filter(lambda element: '[BATCH]' in element.a.text if element.a else None, filter(lambda element: not element.get('class'), soup.find_all('li'))))
     return [
       {'title': element.a.text,
@@ -78,6 +83,7 @@ class AnimeParser(Parser):
     self.description = self.get_description(soup)
     self.seasons = self.get_seasons(soup)
     self.episodes = self.get_episodes(soup)
+    self.batch = self.get_batch(soup)
     if kwargs.get('get_episode_details'):
       asyncio.run(self._asyncGetAllEpisodeDetails(RotateUserAgent=kwargs.get('RotateUserAgent', True)))
     self.batch = self.get_batch(soup)
@@ -139,7 +145,7 @@ class AnimeParser(Parser):
           - producer: The producer of the anime (str).
           - type: The type of the anime (e.g., TV, Movie) (str).
           - status: The current status of the anime (e.g., Ongoing, Completed) (str).
-          - episodes: The number of episodes (str).
+          - totalEpisodes: The number of episodes (str).
           - duration: The duration of each episode (str).
           - releaseDate: The release date of the anime (str).
           - studio: The studio that produced the anime (str).
@@ -277,19 +283,21 @@ class EpisodeParser(Parser):
   @staticmethod
   def get_details(soup: bs)->dict:
     detailsSection = soup.find('div',class_='infozingle')
-    return {
-      'credit': {'value': (i.text.split(':',2)[1].strip() if len(i.text.split(':',2)) > 1 else i.text) for i in detailsSection.find_all('span') if EpisodeDetailsString.credit in i.text.lower()}.get('value'),
-      'encoder': {'value': (i.text.split(':',2)[1].strip() if len(i.text.split(':',2)) > 1 else i.text) for i in detailsSection.find_all('span') if EpisodeDetailsString.encoder in i.text.lower()}.get('value'),
-      'duration': {'value': (i.text.split(':',2)[1].strip() if len(i.text.split(':',2)) > 1 else i.text) for i in detailsSection.find_all('span') if EpisodeDetailsString.duration in i.text.lower()}.get('value'),
-      'type': {'value': (i.text.split(':',2)[1].strip() if len(i.text.split(':',2)) > 1 else i.text) for i in detailsSection.find_all('span') if EpisodeDetailsString.type in i.text.lower()}.get('value'),
-      'genres': [
+    if not detailsSection: return {}
+    uploader = soup.find('div',class_='kategoz').find_all('span')[0].text.split('by', 2)[-1].strip() if soup.find('div',class_='kategoz') and len(soup.find('div',class_='kategoz').find_all('span')) > 1 else None
+    uploadTime = soup.find('div',class_='kategoz').find_all('span')[1].text.split('on', 2)[-1].strip() if soup.find('div',class_='kategoz') and len(soup.find('div',class_='kategoz').find_all('span')) > 1 else None
+    genres = [
         {
           'text': genre.text,
           'url': genre.get('href')
         }
         for genre in detailsSection.find_all('a')
       ]
-    }
+    details = {
+      episodeDetailsMapping.get(detail.text.split(detailsDelimiter, 2)[0].strip().lower(), detail.text.split(detailsDelimiter, 2)[0].strip().lower()): detail.text.split(detailsDelimiter, 2)[-1].strip()
+    for detail in detailsSection.find_all('span') if detail.text and detailsDelimiter in detail.text}
+    (details.update({'uploader': uploader}), details.update({'uploadTime': uploadTime}), details.update({'genres': genres}))
+    return details
 
   @staticmethod
   def get_episodes(soup: bs)-> list:
@@ -436,3 +444,78 @@ class OngoingParser(Parser):
   @staticmethod
   def get_current_page_number(soup: bs) ->int:
     return (int(soup.find('span', class_='page-numbers current').text) if soup.find('span', class_='page-numbers current').text.isnumeric() else soup.find('span', class_='page-numbers current').text) if soup.find('span', class_='page-numbers current') else None
+
+class AsyncParser(Parser):
+  def __init__(self, client: httpx.AsyncClient, **kwargs: dict):
+    self._client = client
+    self._proxy = kwargs.get('proxy')
+    self._userAgent = kwargs.get('user_agent')
+    self._timeout = kwargs.get('timeout', 10)
+
+  @staticmethod
+  async def get_details(self, **kwargs: dict)-> None:
+    try:
+      async with httpx.AsyncClient(proxy=kwargs.get('proxy')) as client:
+        parser = AsyncParser(
+          client,
+          timout=kwargs.get('timeout'),
+          user_agent=kwargs.get('user_agent')
+        )
+        tasks = []
+        tasks.extend( [parser.asyncGetAnimeDetails(anime, update_details=kwargs.get('update_details')) for anime in self.anime ] if kwargs.get('get_anime_details') else [])
+        tasks.extend( [parser.asyncGetEpisodeDetails(episode) for episode in self.episodes ] if kwargs.get('get_episode_details') else [])
+        tasks.extend( [parser.asyncGetBatchDetails(batch) for batch in self.batch ] if kwargs.get('get_batch_details') else [])
+        if tasks: await asyncio.gather(*tasks, return_exceptions=True)
+    except Exception as e:
+      print(e)
+      raise e
+
+  async def asyncGetAnimeDetails(self, anime: dict, update_details: bool=False)-> None:
+    try:
+      r = await self._client.get(
+        url=anime['url'],
+        headers={'User-Agent': self._userAgent or random.choice(userAgents)},
+                           timeout=self._timeout
+                           )
+      soup = bs(r.text, 'html.parser')
+      details = AnimeParser.get_details(soup)
+      [anime.update({key: details.get(key)}) for key in details.keys() if key not in anime.keys() and not update_details]                        
+      anime['episodes'] = AnimeParser.get_episodes(soup)
+      anime['batch'] = AnimeParser.get_batch(soup)
+      anime['description'] = AnimeParser.get_description(soup)
+      anime['seasons'] = AnimeParser.get_seasons(soup)
+      anime['feeds'] = AnimeParser.get_feed(soup)
+    except Exception as e:
+      print(e)
+      pass
+
+  async def asyncGetEpisodeDetails(self, episode: dict)->None:
+    try:
+      r = await self._client.get(
+        url=episode['url'],
+        headers={'User-Agent': self._userAgent or random.choice(userAgents)},
+                           timeout=self._timeout
+                           )
+      soup = bs(r.text, 'html.parser')
+      episode['details'] = EpisodeParser.get_details(soup)
+      episode['thumbnails'] = EpisodeParser.get_thumbnails(soup)
+      episode['otherEpisodes'] = EpisodeParser.get_episodes(soup)
+      episode['links'] = EpisodeParser.get_links(soup)
+    except Exception as e:
+      print(e)
+      episode['details'] = {}
+
+  async def asyncGetBatchDetails(self, batch:dict)-> None:
+    try:
+      r = await self._client.get(
+        url=batch['url'],
+        headers={'User-Agent': self._userAgent or random.choice(userAgents)},
+                           timeout=self._timeout
+                           )
+      soup = bs(r.text, 'html.parser')
+      batch['thumbnails'] = BatchParser.get_thumbnails(soup)
+      batch['description'] = BatchParser.get_description(soup)
+      batch['links'] = BatchParser.get_links(soup)
+    except Exception as e:
+      print(e)
+      pass

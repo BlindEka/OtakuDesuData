@@ -1,7 +1,9 @@
 from OtakuDesuData.parser import SearchResultParser, Parser, OngoingParser
-from OtakuDesuData.constants import baseUrl, userAgent, ongoingUrl, animeListUrl, schedulesUrl, dayMapping
+from OtakuDesuData.constants import baseUrl, userAgent, ongoingUrl, animeListUrl, schedulesUrl, dayMapping, userAgents
 from bs4 import BeautifulSoup as bs
 import requests
+import httpx
+import random
 
 
 class SearchTypes:
@@ -10,8 +12,11 @@ class SearchTypes:
   episode = 'episode'
 
 
-def search(query: str, search_type: SearchTypes=SearchTypes.anime, **kwargs):
-  pass
+def search(query: str, search_type: SearchTypes=SearchTypes.anime, timeout=10, proxy=None, **kwargs):
+  params = {'s': query, 'post_type': search_type}
+  r = httpx.get(baseUrl, timeout=timeout, params=params, proxy=proxy, headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents))})
+  results = SearchResultParser(r.text, timeout=timeout, proxy=proxy, **kwargs)
+  return results.results
 
 class OtakuDesuSearch(Parser):
   def __init__(self, query:str, search_type: SearchTypes=None, timeout: int=10, user_agent: str=userAgent):

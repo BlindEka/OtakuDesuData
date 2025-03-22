@@ -50,7 +50,7 @@ animeDetailsMapping = {
   'produser': 'producers',
   'tipe': 'type',
   'status': 'status',
-  'total episode': 'episodes',
+  'total episode': 'totalEpisodes',
   'durasi': 'duration',
   'tanggal rilis': 'releaseDate',
   'studio': 'studio'
