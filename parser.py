@@ -1,10 +1,8 @@
-import requests
 from bs4 import BeautifulSoup as bs
 from OtakuDesuData.constants import *
 import re
 import asyncio
 import httpx
-from OtakuDesuData.request import RequestCore
 import random
 
 
@@ -74,8 +72,12 @@ class SearchResultParser(Parser):
 
 class AnimeParser(Parser):
   def __init__(self, url: str, **kwargs: dict):
-    self.proxy = kwargs.get('proxy')
-    response = requests.get(url, headers=kwargs.get('headers', {'User-Agent': userAgent}), timeout=kwargs.get('timeout', 10), proxies=kwargs.get('proxy', {}))
+    response = httpx.get(
+      url,
+                            headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents))},
+                            timeout=kwargs.get('timeout', 10),
+                            proxy=kwargs.get('proxy')
+                            )
     soup = bs(response.text, 'html.parser')
     self.title = self.get_title(soup)
     self.details = self.get_details(soup)
@@ -84,36 +86,7 @@ class AnimeParser(Parser):
     self.seasons = self.get_seasons(soup)
     self.episodes = self.get_episodes(soup)
     self.batch = self.get_batch(soup)
-    if kwargs.get('get_episode_details'):
-      asyncio.run(self._asyncGetAllEpisodeDetails(RotateUserAgent=kwargs.get('RotateUserAgent', True)))
-    self.batch = self.get_batch(soup)
-
-  @staticmethod
-  async def _asyncGetEpisodeDetails(episode: dict, client: httpx.AsyncClient, **kwargs)->None:
-    try:
-      r = await client.get(
-        url=episode['url'],
-        headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents) if kwargs.get('RotateUserAgent') else userAgent)} if not (headers := kwargs.get('headers')) else headers,
-                           timeout=kwargs.get('timeout', 10))
-      soup = bs(r.text, 'html.parser')
-      episode['details'] = EpisodeParser.get_details(soup)
-      episode['thumbnails'] = EpisodeParser.get_thumbnails(soup)
-      episode['otherEpisodes'] = EpisodeParser.get_episodes(soup)
-      episode['links'] = EpisodeParser.get_links(soup)
-    except Exception as e:
-      episode['details'] = {}
-
-  async def _asyncGetAllEpisodeDetails(self, **kwargs: dict)-> None:
-    try:
-      async with httpx.AsyncClient(proxy=kwargs.get('proxy', self.proxy)) as client:
-        tasks = [asyncio.create_task(
-          self._asyncGetEpisodeDetails(episode,
-                                         client=client,
-                                         RotateUserAgent=kwargs.get('RotateUserAgent', True))
-                                     ) for episode in self.episodes]
-        await asyncio.gather(*tasks, return_exceptions=True)
-    except Exception as e:
-      raise e
+    asyncio.run(AsyncParser.get_details(self, **kwargs))
 
   @staticmethod
   def get_title(soup: bs) -> str:
@@ -179,7 +152,7 @@ class AnimeParser(Parser):
 
   @staticmethod
   def get_description(soup: bs) -> str:
-    return soup.div.find('div', class_='sinopc').p.text if soup.div.find('div', class_='sinopc') else ''
+    return soup.find('div', class_='sinopc').text if soup.find('div', class_='sinopc') else ''
 
   @staticmethod
   def get_seasons(soup: bs) -> list:
@@ -188,8 +161,8 @@ class AnimeParser(Parser):
         'title': season.text,
         'url': season.get('href')
       }
-       for season in soup.div.find('div', class_='sinopc').find_all('p')[1].find_all('a') # optimize
-      ] if len(soup.div.find('div', class_='sinopc').find_all('p')) > 1 else []
+       for season in soup.find('div', class_='sinopc').find_all('p')[1].find_all('a')
+      ] if (element := soup.find('div', class_='sinopc')) and len(element.find_all('p')) > 1 else []
 
   @staticmethod
   def get_episodes(soup: bs):
@@ -205,22 +178,26 @@ class AnimeParser(Parser):
 
   @staticmethod
   def get_batch(soup: bs) -> list:
-    spans = soup.find('div', class_='episodelist').find_all('span')
+    spans = soup.find('div', class_='episodelist').find_all('span') if soup.find('div', class_='episodelist') else []
     return {
       'title': spans[0].text,
       'url': spans[1].a.get('href'),
       'releaseDate': spans[2].text
-    }
+    } if len(spans) > 2 else {}
 
 
 class BatchParser(Parser):
-  def __init__(self, url: str):
-    response = requests.get(url, headers={'User-Agent': userAgent})
+  def __init__(self, url: str, **kwargs: dict):
+    response = httpx.get(url,
+                         headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents))},
+                         timeout=kwargs.get('timeout', 10),
+                         proxy=kwargs.get('proxy'))
     soup = bs(response.text, 'html.parser')
     self.title = self.get_title(soup)
     self.description = self.get_description(soup)
     self.thumbnails = self.get_thumbnails(soup)
     self.links = self.get_links(soup)
+    asyncio.run(AsyncParser.get_details(self, **kwargs))
 
   @staticmethod
   def get_title(soup: bs) ->str:
@@ -232,7 +209,7 @@ class BatchParser(Parser):
 
   @staticmethod
   def get_thumbnails(soup: bs)-> dict:
-    element = soup.find('div',class_='animeinfo').img
+    element = soup.find('div',class_='animeinfo').img if soup.find('div',class_='animeinfo') else None
     if not element: return {}
     return {
       'url': element.get('src'),
@@ -256,14 +233,18 @@ class BatchParser(Parser):
     return links
 
 class EpisodeParser(Parser):
-  def __init__(self, url: str):
-    response = requests.get(url, headers={'User-Agent': userAgent})
+  def __init__(self, url: str, **kwargs: dict):
+    response = httpx.get(url,
+                         headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents))},
+                         timeout=kwargs.get('timeout', 10),
+                          proxy=kwargs.get('proxy'))
     soup = bs(response.text, 'html.parser')
     self.title = self.get_title(soup)
     self.thumbnails = self.get_thumbnails(soup)
     self.details = self.get_details(soup)
     self.episodes = self.get_episodes(soup)
     self.links = self.get_links(soup)
+    asyncio.run(AsyncParser.get_details(self, **kwargs))
 
   @staticmethod
   def get_title(soup: bs) ->str:
@@ -329,9 +310,13 @@ class OngoingParser(Parser):
   _previous_page_cache = {}
   _next_page_cache = {}
 
-  def __init__(self, url: str, use_cache: bool=True):
-    response = requests.get(url, headers={'User-Agent': userAgent})
+  def __init__(self, url: str, use_cache: bool=False, **kwargs: dict):
+    response = httpx.get(url,
+                         headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents))},
+                         timeout=kwargs.get('timeout', 10),
+                          proxy=kwargs.get('proxy'))
     soup = bs(response.text, 'html.parser')
+    self._kwargs = kwargs
     self.current_page = self.get_current_page_number(soup)
     self.previous_page = self.get_previous_page(soup)
     self.next_page = self.get_next_page(soup)
@@ -371,7 +356,10 @@ class OngoingParser(Parser):
         self.previous_page = self._previous_page_cache[current_page]
         self.releases = self._cache[current_page]
       else:
-        response = requests.get(self.next_page, headers={'User-Agent': userAgent})
+        response = httpx.get(self.next_page,
+                             headers={'User-Agent': self._kwargs.get('user_agent', random.choice(userAgents))},
+                             timeout=self._kwargs.get('timeout', 10),
+                              proxy=self._kwargs.get('proxy'))
         soup = bs(response.text, 'html.parser')
         self.current_page = self.get_current_page_number(soup)
         self.next_page = self.get_next_page(soup)
@@ -391,7 +379,10 @@ class OngoingParser(Parser):
         self.previous_page = self._previous_page_cache[current_page]
         self.releases = self._cache[current_page]
       else:
-        response = requests.get(self.next_page, headers={'User-Agent': userAgent})
+        response = httpx.get(self.next_page,
+                             headers={'User-Agent': self._kwargs.get('user_agent', random.choice(userAgents))},
+                             timeout=self._kwargs.get('timeout', 10),
+                              proxy=self._kwargs.get('proxy'))
         soup = bs(response.text, 'html.parser')
         self.current_page = self.get_current_page_number(soup)
         self.next_page = self.get_next_page(soup)
@@ -462,13 +453,12 @@ class AsyncParser(Parser):
           user_agent=kwargs.get('user_agent')
         )
         tasks = []
-        tasks.extend( [parser.asyncGetAnimeDetails(anime, update_details=kwargs.get('update_details')) for anime in self.anime ] if kwargs.get('get_anime_details') else [])
-        tasks.extend( [parser.asyncGetEpisodeDetails(episode) for episode in self.episodes ] if kwargs.get('get_episode_details') else [])
-        tasks.extend( [parser.asyncGetBatchDetails(batch) for batch in self.batch ] if kwargs.get('get_batch_details') else [])
-        if tasks: await asyncio.gather(*tasks, return_exceptions=True)
+        tasks.extend( [asyncio.create_task(parser.asyncGetAnimeDetails(anime, update_details=kwargs.get('update_details'))) for anime in getattr(self, 'anime', []) ] if kwargs.get('get_anime_details') else [])
+        tasks.extend( [asyncio.create_task(parser.asyncGetEpisodeDetails(episode)) for episode in getattr(self,'episodes',[]) ] if kwargs.get('get_episode_details') else [])
+        tasks.extend( [asyncio.create_task(parser.asyncGetBatchDetails(batch)) for batch in getattr(self, 'batch',[]) ] if kwargs.get('get_batch_details') else [])
+        await asyncio.gather(*tasks)
     except Exception as e:
-      print(e)
-      raise e
+      if kwargs.get('raise_exception'): raise e
 
   async def asyncGetAnimeDetails(self, anime: dict, update_details: bool=False)-> None:
     try:
@@ -486,8 +476,7 @@ class AsyncParser(Parser):
       anime['seasons'] = AnimeParser.get_seasons(soup)
       anime['feeds'] = AnimeParser.get_feed(soup)
     except Exception as e:
-      print(e)
-      pass
+      raise e
 
   async def asyncGetEpisodeDetails(self, episode: dict)->None:
     try:
@@ -503,7 +492,7 @@ class AsyncParser(Parser):
       episode['links'] = EpisodeParser.get_links(soup)
     except Exception as e:
       print(e)
-      episode['details'] = {}
+      raise e
 
   async def asyncGetBatchDetails(self, batch:dict)-> None:
     try:
@@ -517,5 +506,4 @@ class AsyncParser(Parser):
       batch['description'] = BatchParser.get_description(soup)
       batch['links'] = BatchParser.get_links(soup)
     except Exception as e:
-      print(e)
-      pass
+      raise e

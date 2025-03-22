@@ -1,7 +1,6 @@
 from OtakuDesuData.parser import SearchResultParser, Parser, OngoingParser
-from OtakuDesuData.constants import baseUrl, userAgent, ongoingUrl, animeListUrl, schedulesUrl, dayMapping, userAgents
+from OtakuDesuData.constants import *
 from bs4 import BeautifulSoup as bs
-import requests
 import httpx
 import random
 
@@ -18,22 +17,6 @@ def search(query: str, search_type: SearchTypes=SearchTypes.anime, timeout=10, p
   results = SearchResultParser(r.text, timeout=timeout, proxy=proxy, **kwargs)
   return results.results
 
-class OtakuDesuSearch(Parser):
-  def __init__(self, query:str, search_type: SearchTypes=None, timeout: int=10, user_agent: str=userAgent):
-    params = {'s': query, } if not search_type else {'s': query, 'post_type': search_type}
-    response = requests.get(url=baseUrl, params=params, headers={'User-Agent': user_agent}, timeout=timeout)
-    response.raise_for_status()
-    contents = SearchResultParser(response.content)
-    self.anime = contents['anime']
-    self.batch = contents['batch']
-    self.episodes = contents['episodes']
-    results = {
-      'anime': contents.anime,
-      'episodes': contents.episodes,
-      'batch': contents.batch
-    }
-    self.results = results
-
 def get_ongoing(get_all: bool=False):
   ongoing = OngoingParser(ongoingUrl)
   if not get_all:
@@ -43,8 +26,11 @@ def get_ongoing(get_all: bool=False):
     results.append(i)
   return results
 
-def get_schedules():
-  response = requests.get(schedulesUrl, headers={'User-Agent': userAgent})
+def get_schedules(**kwargs: dict):
+  response = httpx.get(schedulesUrl,
+                       headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents))},
+                       timeout=kwargs.get('timeout', 10),
+                        proxy=kwargs.get('proxy'))
   soup = bs(response.text,'html.parser')
   return {
     dayMapping.get(day.h2.text.strip().lower(), day.h2.text.strip().lower()): [
@@ -56,8 +42,11 @@ def get_schedules():
    for day in soup.find_all('div', class_='kglist321')
    if day.h2}
 
-def get_anime_list():
-  response = requests.get(animeListUrl, headers={'User-Agent': userAgent})
+def get_anime_list(**kwargs: dict)->list:
+  response = httpx.get(animeListUrl,
+                       headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents))},
+                       timeout=kwargs.get('timeout', 10),
+                        proxy=kwargs.get('proxy'))
   soup = bs(response.text,'html.parser')
   animeListElements = list = soup.find_all('a',class_='hodebgst')
   return [
