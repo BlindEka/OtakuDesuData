@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from OtakuDesuData import search, get_ongoing, get_schedules, get_anime_list
-from OtakuDesuData.parser import SearchResultParser, AnimeParser, BatchParser, EpisodeParser, OngoingParser
-from OtakuDesuData.constants import baseUrl, ongoingUrl, schedulesUrl, animeListUrl
+from otakudesudata import search, get_ongoing, get_schedules, get_anime_list  # Ensure correct library name
+from otakudesudata.parser import SearchResultParser, AnimeParser, BatchParser, EpisodeParser, OngoingParser
+# Removed unused imports
 
 class TestSearchFunction(unittest.TestCase):
     @patch('httpx.get')
@@ -15,20 +15,20 @@ class TestSearchFunction(unittest.TestCase):
         self.assertIsInstance(results, dict)
 
 class TestGetOngoingFunction(unittest.TestCase):
-    @patch('OtakuDesuData.parser.OngoingParser')
+    @patch('otakudesudata.parser.OngoingParser')
     def test_get_ongoing(self, mock_ongoing_parser):
         mock_ongoing_parser.return_value = MagicMock()
         ongoing = get_ongoing()
         self.assertIsNotNone(ongoing)
 
-    @patch('OtakuDesuData.parser.OngoingParser')
+    @patch('otakudesudata.parser.OngoingParser')
     def test_get_ongoing_all(self, mock_ongoing_parser):
         mock_ongoing_parser.return_value = MagicMock()
         ongoing = get_ongoing(get_all=True)
         self.assertIsInstance(ongoing, list)
 
 class TestGetSchedulesFunction(unittest.TestCase):
-    @patch('requests.get')
+    @patch('httpx.get')
     def test_get_schedules(self, mock_get):
         mock_response = MagicMock()
         mock_response.text = '<html></html>'
@@ -38,7 +38,7 @@ class TestGetSchedulesFunction(unittest.TestCase):
         self.assertIsInstance(schedules, dict)
 
 class TestGetAnimeListFunction(unittest.TestCase):
-    @patch('requests.get')
+    @patch('httpx.get')
     def test_get_anime_list(self, mock_get):
         mock_response = MagicMock()
         mock_response.text = '<html></html>'

@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup as bs
-from OtakuDesuData.constants import *
+from otakudesudata.constants import *
 import re
 import asyncio
 import httpx
@@ -45,18 +45,13 @@ class SearchResultParser(Parser):
         - get_batch_details (bool, optional): Whether to fetch detailed information for each batch. Defaults to False.
         raise_exception (bool, optional): Whether to raise exceptions while fetching other details. Defaults to False.
     Example:
-      parser = SearchResultParser(html_string, proxy="http://proxy.example.com", user_agent="CustomUserAgent/1.0", timeout=10)
-      print(parser.anime)  # List of parsed anime details
-      print(parser.episodes)  # List of parsed episode details
-      print(parser.batch)  # List of parsed batch details
-      #output
-      #anime list
-      [{'title': 'Anime Title', 'url': 'https://example.com/anime', 'thumbnails': {'width': '100', 'height': '100', 'url': 'https://example.com/thumbnail.jpg', 'srcset': ['https://example.com/thumbnail.jpg 1x', 'https://example
-      .com/thumbnail.jpg 2x']}, 'genres': [{'text': 'Action', 'url': 'https://example.com/genre/action'}, {'text': 'Adventure', 'url': 'https://example.com/genre/adventure'}], 'status': 'Ongoing', 'rating': '8.0'}, ...]
-#episode list
-      [{'title': 'Episode 1', 'url': 'https://example.com/anime/episode/1', 'episode': '1'}, ...]
-      #batch list
-      [{'title': 'Batch Download', 'url': 'https://example.com/anime/batch'}, ...]
+      >>>from otakudesudata.parser import SearchResultParser
+      >>>html_string = '<html>....
+      ...</html>'
+      >>>parser = SearchResultParser(html_string)
+      >>>print(parser.anime)
+      >>>print(parser.episodes)
+      >>>print(parser.batch)
     """
   def __init__(self, html_string: str, **kwargs:dict):
     soup = bs(html_string, 'html.parser')
@@ -213,6 +208,18 @@ class AnimeParser(Parser):
           - title (str): The title of the batch.
           - url (str): The URL of the batch.
           - releaseDate (str): The release date of the batch.
+
+          examples of usage:
+          >>> from otakudesudata.parser import AnimeParser
+          >>> url = 'https://otakudesu.cloud/anime/one-piece/'
+          >>> parser = AnimeParser(url)
+          >>> print(parser.title)
+          >>> print(parser.details)
+          >>> print(parser.feed)
+          >>> print(parser.description)
+          >>> print(parser.seasons)
+          >>> print(parser.episodes)
+          >>> ...
   """
   def __init__(self, url: str, **kwargs: dict):
     response = httpx.get(
@@ -372,7 +379,7 @@ class BatchParser(Parser):
           - url (str): The URL of the download link.
 
         example of usage:
-        from OtaKuDesuData.parser import BatchParser
+        from otakudesudata.parser import BatchParser
         url = 'https://otakudesu.cloud/batch/one-piece-batch-subtitle-indonesia/'
         parser = BatchParser(url)
         print(parser.title)
@@ -504,7 +511,7 @@ class EpisodeParser(Parser):
         dict: A dictionary of download links categorized by resolution.
 
         example of usage:
-        from OtaKuDesuData.parser import EpisodeParser
+        from otakudesudata.parser import EpisodeParser
         url = 'https://otakudesu.cloud/episode/one-piece-episode-1000/'
         parser = EpisodeParser(url)
         print(parser.title)

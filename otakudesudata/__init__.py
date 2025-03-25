@@ -1,5 +1,5 @@
-from OtakuDesuData.parser import SearchResultParser, Parser, OngoingParser
-from OtakuDesuData.constants import *
+from otakudesudata.parser import SearchResultParser, Parser, OngoingParser
+from otakudesudata.constants import *
 from bs4 import BeautifulSoup as bs
 import httpx
 import random
@@ -41,7 +41,7 @@ def search(query: str, search_type: SearchTypes=SearchTypes.anime, timeout=10, p
 
     Example:
       ```python
-      from OtakuDesuData import search, SearchTypes
+      from otakudesudata import search, SearchTypes
 
       # Search for anime
       results = search("One Piece", search_type=SearchTypes.anime)
@@ -85,7 +85,7 @@ def get_ongoing(get_all: bool=False, use_cache: bool=True, timeout: int=10, prox
 
   Example:
     ```python
-    from OtakuDesuData import get_ongoing
+    from otakudesudata import get_ongoing
 
     # Get the list of ongoing anime
     ongoing_anime = get_ongoing()
@@ -126,14 +126,11 @@ def get_schedules(**kwargs: dict):
       - 'title' (str): The title of the anime.
       - 'url' (str): The URL of the anime.
 
-  Notes:
-    - The function uses BeautifulSoup to parse the HTML response and extract the relevant data.
-    - The `dayMapping` dictionary is used to map day names from the website to standardized day names.
-    - If a day or anime title is not found, it will be skipped or set to None.
-
   Example:
-    schedules = get_schedules(user_agent="CustomUserAgent", timeout=15)
-    print(schedules["monday"])
+    >>> from otakudesudata import get_schedules
+    >>> schedules = get_schedules()
+    >>> # Print the anime schedule for Monday
+    >>> print(schedules['monday'])
   """
   response = httpx.get(schedulesUrl,
                        headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents))},
@@ -171,11 +168,13 @@ def get_anime_list(**kwargs: dict)->list:
         - 'url' (str): The URL of the anime.
 
     Example:
-      >>>from OtakuDesuData import get_anime_list
+      >>>from otakudesudata import get_anime_list
       >>> anime_list = get_anime_list(user_agent="CustomUserAgent", timeout=15)
-      >>> print(anime_list)
+      >>> # Print the first anime title and URL
+      >>> print(f"Title: {anime_list[0]['title']}, URL: {anime_list[0]['url']}")
+    
       # Output:
-      [{'title': 'Anime Title 1', 'url': 'https://otakudesu.tv/anime1'}, ...]
+      [{'title': 'Anime Title 1', 'url': 'https://otakudesu.cloud/anime1'}, ...]
     """
   response = httpx.get(animeListUrl,
                        headers={'User-Agent': kwargs.get('user_agent', random.choice(userAgents))},
