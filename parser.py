@@ -79,7 +79,7 @@ class SearchResultParser(Parser):
                 'height': element.img.get('height'),
                 'url': element.img.get('src'),
                 'srcset': element.img.get('srcset').split()[::2] if element.img.get('srcset') and len(element.img.get('srcset').split()) > 1 else None,
-                } if element.img else [],
+                } if element.img else {},
                 'genres': [
                   {
                     'text': genre.text,
@@ -132,6 +132,7 @@ class AnimeParser(Parser):
           - user_agent (str): Custom User-Agent header for the HTTP request.
           - timeout (int): Timeout for the HTTP request (default is 10 seconds).
           - proxy (str): Proxy to use for the HTTP request.
+          
     get_title(soup: bs4.BeautifulSoup) -> str:
       Extracts the title of the anime from the parsed HTML.
       args:
@@ -409,32 +410,31 @@ class BatchParser(Parser):
 
   @staticmethod
   def get_description(soup: bs) ->str:
-    return (soup.find('div',class_='deskripsi').p.text if soup.find('div',class_='deskripsi').p else '') if soup.find('div',class_='deskripsi') else ''
+    return soup.find('div',class_='deskripsi').p.text.strip() if (element := soup.find('div',class_='deskripsi')) and element.p else ''
 
   @staticmethod
   def get_thumbnails(soup: bs)-> dict:
     element = soup.find('div',class_='animeinfo').img if soup.find('div',class_='animeinfo') else None
-    if not element: return {}
     return {
       'url': element.get('src'),
       'width': element.get('width'),
       'height': element.get('height'),
       'srcset': element.get('srcset').split()[::2] if element.get('srcset') else []
-    }
+    } if element else {}
 
   @staticmethod
   def get_links(soup: bs) -> dict:
-    batchResolutions = soup.find('div', class_='download2').find_all('li') if soup.find('div', class_='download2') else []
-    links = {}
-    for resolution in batchResolutions:
-      links[resolution.strong.text.strip().lower()] = [
+    return {
+      resolution.strong.text.replace(' ','').lower():
+      [
         {
           'host': link.text.strip().lower() if link.text else '',
           'url': link.get('href')
         }
-        for link in resolution.find_all('a')
-      ]
-    return links
+      for link in resolution.find_all('a')]
+    for resolution in soup.find('div', class_='download2').find_all('li')} if soup.find('div', class_='download2') else {}
+
+
 
 class EpisodeParser(Parser):
   """
@@ -545,13 +545,12 @@ class EpisodeParser(Parser):
   @staticmethod
   def get_thumbnails(soup: bs)->dict:
     element = soup.find('div',class_='cukder').img if soup.find('div',class_='cukder') else None
-    if not element: return {}
     return {
       'url': element.get('src'),
       'width': element.get('width'),
       'height': element.get('height'),
       'srcset': element.get('srcset').split()[::2] if element.get('srcset') else []
-    }
+    } if element else {}
 
   @staticmethod
   def get_details(soup: bs)->dict:
@@ -574,27 +573,24 @@ class EpisodeParser(Parser):
 
   @staticmethod
   def get_episodes(soup: bs)-> list:
-    episodes = soup.find('div',class_='cukder').find_all('li') if soup.find('div',class_='cukder') else []
     return [
       {
-        'title': episode.a.text if episode.a else None,
-        'url': episode.a.get('href') if episode.a else None,
+        'title': episode.a.text.strip() ,
+        'url': episode.a.get('href')
       }
-    for episode in episodes][::-1]
+    for episode in soup.find('div',class_='cukder').find_all('li') if episode.a][::-1] if soup.find('div',class_='cukder') else []
 
   @staticmethod
   def get_links(soup: bs) -> dict:
-    resolutions = soup.find('div', class_='download').find_all('li') if soup.find('div', class_='download') else []
-    links = {}
-    for resolution in resolutions:
-      links[resolution.strong.text.strip().lower()] = [
+    return {
+      resolution.strong.text.replace(' ','').lower():
+      [
         {
           'host': link.text.strip().lower() if link.text else '',
           'url': link.get('href')
         }
-        for link in resolution.find_all('a')
-      ]
-    return links
+      for link in resolution.find_all('a')]
+    for resolution in soup.find('div', class_='download').find_all('li')} if soup.find('div', class_='download') else {}
 
 
 class OngoingParser(Parser):
