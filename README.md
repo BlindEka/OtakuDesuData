@@ -19,7 +19,7 @@ Here are some examples of how to use this module:
 Anime Search
 
 ```
-from OtakuDesuData import search, SearchTypes
+from otakudesudata import search, SearchTypes
 
 # Search for anime by query
 results = search("jujutsu kaisen", search_type=SearchTypes.anime)
@@ -34,7 +34,7 @@ for anime in results['anime']:
 Episode Search
 
 ```
-from OtakuDesuData import search, SearchTypes
+from otakudesudata import search, SearchTypes
 
 # Search for episodes by title or episode number
 results = search("jujutsu kaisen episode 10", search_type=SearchTypes.episode)
@@ -46,7 +46,7 @@ for episode in results['episodes']:
 Batch Search
 
 ```
-from OtakuDesuData import search, SearchTypes
+from otakudesudata import search, SearchTypes
 
 # Search for batch downloads of specific anime
 results = search("jujutsu kaisen season 1", search_type=SearchTypes.batch)
@@ -58,7 +58,7 @@ for batch in results['batch']:
 Get Ongoing Anime
 
 ```
-from OtakuDesuData import get_ongoing
+from otakudesudata import get_ongoing
 
 # Get a list of currently airing anime
 ongoing_anime = get_ongoing(get_all=True) #get all ongoing anime from all page
@@ -69,7 +69,7 @@ for anime in ongoing_anime:
 Get Release Schedules
 
 ```
-from OtakuDesuData import get_schedules
+from otakudesudata import get_schedules
 
 # Retrieve anime release schedules
 schedules = get_schedules()
