@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: OtakuDesuData
-Version: 0.1.0
+Version: 0.1.1
 Summary: A Python library for scraping anime data from the OtakuDesu website
 Home-page: https://github.com/BlindEka/OtakuDesuData
 Author: Eka
@@ -36,13 +36,18 @@ Dynamic: summary
 # OtakuDesuData
 
 OtakuDesuData is a Python module designed for scraping data from the [OtakuDesu](https://otakudesu.cloud) website, a free anime-sharing site with Indonesian subtitles. This module allows you to retrieve information such as anime lists, episodes, batch downloads, release schedules, and more.
-
 ## Features
 - **Anime Search**: Search for anime by query.
-- **Episode Search**: Search for episodes by querynumber.
+- **Episode Search**: Search for episodes by query.
 - **Batch Search**: Search for batch downloads of specific anime.
 - **Release Schedules**: Retrieve anime release schedules.
 - **Ongoing Anime**: Get a list of currently airing anime.
+- **Anime Details**: Retrieve detailed information about a specific anime, including synopsis, genres, and more.
+- **Episode Details**: Get detailed information about specific episodes, such as download links and streaming URLs.
+- **Batch Details**: Retrieve detailed information about batch downloads, including available resolutions and file sizes.
+- **Anime List**: Retrieve a paginated list of all available anime on the website.
+- **Custom Parsers**: Use built-in parsers to extract specific data from OtakuDesu pages.
+
 
 ## Installation
 You can install this module directly from GitHub using the following command:

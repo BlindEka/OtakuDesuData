@@ -40,9 +40,13 @@ class SearchResultParser(Parser):
         - proxy (str, optional): Proxy URL to be used for fetching additional details.
         - user_agent (str, optional): Custom user agent string. Defaults to a rotating user agent.
         - timeout (int, optional): Timeout duration (in seconds) for network requests. Defaults to a reasonable value.
-        - get_anime_detail (bool, optional): Whether to fetch detailed information for each anime. Defaults to False.
+        - get_anime_details (bool, optional): Whether to fetch detailed information for each anime. Defaults to False.
         - get_episode_details (bool, optional): Whether to fetch detailed information for each episode. Defaults to False.
         - get_batch_details (bool, optional): Whether to fetch detailed information for each batch. Defaults to False.
+        - update_details (bool, optional): whether to update each anime details during fetching anime details
+        - client_max_connections (int, optional): The maximum number of client concurrent connections that may be established during fetching other details. Default to 100
+        - max_keepalive_connections (int, optional): Allow the connection pool to maintain keep-alive connections below this point. Should be less than or equal to `client_max_connections`. Default to 20% of `client_max_connections`.
+        - keepalive_expiry (float, optional): Time limit on idle keep-alive connections in seconds. Default to 5 seconds.
         raise_exception (bool, optional): Whether to raise exceptions while fetching other details. Defaults to False.
     Example:
       >>>from otakudesudata.parser import SearchResultParser
@@ -99,7 +103,7 @@ class SearchResultParser(Parser):
 
   @staticmethod
   def get_batch(soup):
-    elements = list(filter(lambda element: '[BATCH]' in element.a.text if element.a else None, filter(lambda element: not element.get('class'), soup.find_all('li'))))
+    elements = list(filter(lambda element: batchSearchPattern in element.a.text if element.a else None, filter(lambda element: not element.get('class'), soup.find_all('li'))))
     return [
       {'title': element.a.text,
        'url': element.a.get('href')
@@ -127,6 +131,12 @@ class AnimeParser(Parser):
           - user_agent (str): Custom User-Agent header for the HTTP request.
           - timeout (int): Timeout for the HTTP request (default is 10 seconds).
           - proxy (str): Proxy to use for the HTTP request.
+          - get_episode_details (bool, optional): Whether to fetch detailed information for each episode. Defaults to False.
+          - get_batch_details (bool, optional): Whether to fetch detailed information for each batch. Defaults to False.
+          - client_max_connections (int, optional): The maximum number of client concurrent connections that may be established during fetching other details. Default to 100
+          - max_keepalive_connections (int, optional): Allow the connection pool to maintain keep-alive connections below this point. Should be less than or equal to `client_max_connections`. Default to 20% of `client_max_connections`.
+          - keepalive_expiry (float, optional): Time limit on idle keep-alive connections in seconds. Default to 5 seconds.
+          - raise_exception (bool, optional): Whether to raise exceptions while fetching other details. Defaults to False.
           
     get_title(soup: bs4.BeautifulSoup) -> str:
       Extracts the title of the anime from the parsed HTML.
@@ -334,6 +344,7 @@ class BatchParser(Parser):
       - user_agent (str): Custom User-Agent header for the HTTP request. Defaults to a random choice from `userAgents`.
       - timeout (int): Timeout for the HTTP request in seconds. Defaults to 10.
       - proxy (str): Proxy to use for the HTTP request. Defaults to None.
+      
   Attributes:
     title (str): The title of the batch extracted from the webpage.
     thumbnails (dict): A dictionary containing thumbnail information:
@@ -409,7 +420,6 @@ class BatchParser(Parser):
     self.description = self.get_description(soup)
     self.thumbnails = self.get_thumbnails(soup)
     self.links = self.get_links(soup)
-    asyncio.run(AsyncParser.get_details(self, **kwargs))
 
   @staticmethod
   def get_title(soup: bs) ->str:
@@ -454,7 +464,10 @@ class EpisodeParser(Parser):
       - timeout (int): Timeout for the HTTP request in seconds. Defaults to 10.
       - proxy (str): Proxy to use for the HTTP request. Defaults to None.
       - get_episode_details (bool): Whether to fetch detailed information for each episode. Defaults to False.
-      raise_exception (bool): Whether to raise exceptions while fetching each episode  details. Defaults to False.
+      - client_max_connections (int, optional): The maximum number of client concurrent connections that may be established during fetching other details. Default to 100
+      - max_keepalive_connections (int, optional): Allow the connection pool to maintain keep-alive connections below this point. Should be less than or equal to `client_max_connections`. Default to 20% of `client_max_connections`.
+      - keepalive_expiry (float, optional): Time limit on idle keep-alive connections in seconds. Default to 5 seconds.
+      - raise_exception (bool): Whether to raise exceptions while fetching each episode  details. Defaults to False.
   Attributes:
     title (str): The title of the episode extracted from the webpage.
     thumbnails (dict): A dictionary containing thumbnail information:
@@ -684,8 +697,6 @@ class OngoingParser(Parser):
       a random User-Agent is selected from the `userAgents` list (from OtakuDesuData.constants).
     - The `timeout` keyword argument specifies the timeout for HTTP requests, with a default of 10 seconds.
     - The `proxy` keyword argument allows specifying a proxy for HTTP requests.
-    - Methods like `get_anime_detail`, `get_episode_details`, and `get_batch_details` are not implemented 
-      in this class but may be available in other classes like `SearchResultParser`.
   """
   _cache = {}
   _previous_page_cache = {}
@@ -703,6 +714,7 @@ class OngoingParser(Parser):
     self.next_page = self.get_next_page(soup)
     self.releases = self.get_releases(soup)
     self.use_cache = use_cache
+    self._current_index = 0
     if use_cache:
       self._cache[self.current_page] = self.releases
       self._previous_page_cache[self.current_page] = self.previous_page
@@ -827,22 +839,27 @@ class AsyncParser(Parser):
   @staticmethod
   async def get_details(self, **kwargs: dict)-> None:
     try:
-      async with httpx.AsyncClient(proxy=kwargs.get('proxy')) as client:
+      max = kwargs.get('client_max_connections', 100)
+      _20percentage = int(20 * max / 100)
+      keepalive = kwargs.get('max_keepalive_connections', _20percentage if _20percentage > 1 else 1)
+      async with httpx.AsyncClient(proxy=kwargs.get('proxy'), limits=httpx.Limits(max_connections=max, max_keepalive_connections=keepalive, keepalive_expiry=kwargs.get('keepalive_expiry', 5))) as client:
         parser = AsyncParser(
           client,
           timout=kwargs.get('timeout'),
           user_agent=kwargs.get('user_agent')
         )
         tasks = []
-        tasks.extend( [asyncio.create_task(parser.asyncGetAnimeDetails(anime, update_details=kwargs.get('update_details'))) for anime in getattr(self, 'anime', []) ] if kwargs.get('get_anime_details') else [])
-        tasks.extend( [asyncio.create_task(parser.asyncGetEpisodeDetails(episode)) for episode in getattr(self,'episodes',[]) ] if kwargs.get('get_episode_details') else [])
-        tasks.extend( [asyncio.create_task(parser.asyncGetBatchDetails(batch)) for batch in getattr(self, 'batch',[]) ] if kwargs.get('get_batch_details') else [])
+        tasks.extend( [asyncio.create_task(parser.asyncGetAnimeDetails(anime, update_details=kwargs.get('update_details'))) for anime in getattr(self, 'anime', []) ] ) if kwargs.get('get_anime_details') else None 
+        tasks.extend( [asyncio.create_task(parser.asyncGetEpisodeDetails(episode)) for episode in getattr(self, 'episodes',[]) ]) if kwargs.get('get_episode_details') else None
+        if kwargs.get('get_batch_details') and isinstance(batch := getattr(self,'batch',[]), dict): tasks.append(asyncio.create_task(parser.asyncGetBatchDetails(batch)))
+        elif kwargs.get('get_batch_details') and isinstance(batch := getattr(self,'batch',[]), list): tasks.extend( [ asyncio.create_task(parser.asyncGetBatchDetails(b)) for b in batch ])        
         await asyncio.gather(*tasks)
     except Exception as e:
       if kwargs.get('raise_exception'): raise e
 
   async def asyncGetAnimeDetails(self, anime: dict, update_details: bool=False)-> None:
     try:
+      if not isinstance(anime, dict) or not anime.get('url'): return None #validate object and url
       r = await self._client.get(
         url=anime['url'],
         headers={'User-Agent': self._userAgent or random.choice(userAgents)},
@@ -861,6 +878,7 @@ class AsyncParser(Parser):
 
   async def asyncGetEpisodeDetails(self, episode: dict)->None:
     try:
+      if not isinstance(episode, dict) or not episode.get('url'): return None #validate object and url
       r = await self._client.get(
         url=episode['url'],
         headers={'User-Agent': self._userAgent or random.choice(userAgents)},
@@ -877,6 +895,7 @@ class AsyncParser(Parser):
 
   async def asyncGetBatchDetails(self, batch:dict)-> None:
     try:
+      if not isinstance(batch, dict) or not batch.get('url'): return None #validate object and url
       r = await self._client.get(
         url=batch['url'],
         headers={'User-Agent': self._userAgent or random.choice(userAgents)},
