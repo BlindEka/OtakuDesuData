@@ -1,18 +1,48 @@
+Metadata-Version: 2.4
+Name: OtakuDesuData
+Version: 0.1.0
+Summary: A Python library for scraping anime data from the OtakuDesu website
+Home-page: https://github.com/BlindEka/OtakuDesuData
+Author: Eka
+Author-email: ekazero99@gmail.com
+License: MIT
+Project-URL: Source Code, https://github.com/BlindEka/OtakuDesuData
+Project-URL: Issue Tracker, https://github.com/BlindEka/OtakuDesuData/issues
+Keywords: anime,scraping,otakudesu,otakudesu.cloud,beautifulsoup,httpx
+Platform: any
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: httpx
+Requires-Dist: beautifulsoup4
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: platform
+Dynamic: project-url
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
 # OtakuDesuData
 
 OtakuDesuData is a Python module designed for scraping data from the [OtakuDesu](https://otakudesu.cloud) website, a free anime-sharing site with Indonesian subtitles. This module allows you to retrieve information such as anime lists, episodes, batch downloads, release schedules, and more.
+
 ## Features
 - **Anime Search**: Search for anime by query.
-- **Episode Search**: Search for episodes by query.
+- **Episode Search**: Search for episodes by querynumber.
 - **Batch Search**: Search for batch downloads of specific anime.
 - **Release Schedules**: Retrieve anime release schedules.
 - **Ongoing Anime**: Get a list of currently airing anime.
-- **Anime Details**: Retrieve detailed information about a specific anime, including synopsis, genres, and more.
-- **Episode Details**: Get detailed information about specific episodes, such as download links and streaming URLs.
-- **Batch Details**: Retrieve detailed information about batch downloads, including available resolutions and file sizes.
-- **Anime List**: Retrieve a paginated list of all available anime on the website.
-- **Custom Parsers**: Use built-in parsers to extract specific data from OtakuDesu pages.
-
 
 ## Installation
 You can install this module directly from GitHub using the following command:

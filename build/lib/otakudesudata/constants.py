@@ -32,7 +32,6 @@ userAgents = [
 
 animeSearchPattern = r'\(.+1.+\d{1,3}\)'
 episodeSearchPattern = r'(?:episode )(\d{1,3})(?: subtitle indonesia)'
-batchSearchPattern = '[BATCH]'
 
 dayMapping = {
   'senin': 'monday',
