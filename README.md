@@ -8,10 +8,11 @@ OtakuDesuData is a Python module designed for scraping data from the [OtakuDesu]
 - **Release Schedules**: Retrieve anime release schedules.
 - **Ongoing Anime**: Get a list of currently airing anime.
 - **Anime Details**: Retrieve detailed information about a specific anime, including synopsis, genres, and more.
-- **Episode Details**: Get detailed information about specific episodes, such as download links and streaming URLs.
-- **Batch Details**: Retrieve detailed information about batch downloads, including available resolutions and file sizes.
+- **Episode Details**: Get detailed information about specific episodes, such as download links and release date.
+- **Batch Details**: Retrieve detailed information about batch downloads, including available resolutions and download links.
 - **Anime List**: Retrieve a paginated list of all available anime on the website.
 - **Custom Parsers**: Use built-in parsers to extract specific data from OtakuDesu pages.
+- **asynchronus operation**: get every anime, episode and batch details on search results at the same time with asynchronus operations.
 
 
 ## Installation
